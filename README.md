@@ -66,7 +66,7 @@ If Python 3 is not installed, download and install it from the official Python w
 
 After installing Python, you need to install the required Python libraries to run the scripts. You can install them using pip (Python's package manager). Open a terminal or command prompt and run the following command:
 ```
-pip install opencv-python numpy tqdm
+pip3 install opencv-python numpy tqdm
 ```
 This will install the following packages:
  - OpenCV (opencv-python): Used for video processing.
