@@ -103,12 +103,55 @@ If there are no errors, your installation is complete!
 
 # Usage
 
-## **Basic Usage Example**
+## Usage for single output
 
-This example is for users who want to process a single video with minimal settings:
+To process a video, `process_video.py` script is used. Here's an example is for users who want to process a single video with minimal settings:
 
 Process a video with default settings, and save the processed video to `video_output` directory:
 `python3 process_video.py -i video.mp4`
 
-Process a video using "window" mode 
+Process a video using "window" mode, with window size of 20 frames, blending mode `add` and a power dropoff parameter of `2`:
 `python3 process_video.py -i video.mp4 -m window -ws 20 -bm add -pw 2`
+
+Process a video with `screen` blend mode and decay value of `0.9`:
+`python3 process_video.py -i video.mp4 -bm screen -dp 0.90`
+
+## Batch processing
+
+Sometimes it's hard to imagine how things will turn out before creating the final video, and you might want to experiment with a range of settings. Batch processing does exactly that. Imagine you have an input video and you want to try different blend modes, decay parameters, and power dropoff values to see what results in the style you'd want the most. With batch processing script, you can create combinations of outputs based on the parameters that accept multiple values. 
+
+For batch processing, `lightpaint_batch.py` script is used. Here is an example (script converted to multiline for readibility, you can of course type all in a single line):
+
+```
+python3 lightpaint_batch.py \        
+    -i paint.mp4 \
+    -bm lighten,add,screen \
+    -pw 1,1.2,1.5,2 \
+    -dp 0.6,0.7,0.8,0.9,0.95,0.98
+```
+
+This script takes an input video `paint.mp4`, and creates different versions of output with different blend modes, power dropoff, and decay parameters. It will create every combination of blend modes (`lighten`, `add`, `screen`), power dropoff values (`1`, `1.2`, `1.5`, `2`), and decay parameters (`0.6`, `0.7`, `0.8`, `0,9`, `0.95`, `0.98`). So it will create 3 (blend modes) × 4 (power dropoff values) × 6 (decay parameters) = 72 videos. Batch processing script spawns a new instance of the original script based on your device's CPU cores so, if you have 8 cores, it can process 8 videos at once for a faster batch output.
+
+Note: Batch processing parameters are currently limited to decay, power, and blending mode variations. Specifying mode (therefore window size), decay type, and bit depth are currently not supported.
+
+# Examples
+
+I've ran the batch processing script on the reference video, `input.mp4`, and the example above, which created 72 variations of the video. You can check them out at `video_output` directory.
+
+# Fun fact
+
+I'm not a Python developer, and I've used GPT-4o and o1-preview to create this script. I first started a conversation with 4o, which, in the meantime, o1-preview was announced where I had the very basic script ready. If you want to dive into the process of how I "created" this from scratch, you can read the whole conversation with all the pitfalls, strong sides of code generation, and problems I faced on the following link: https://chatgpt.com/share/66e5ba82-57a8-8005-9731-db928a795a85 (it doesn't contain the initial conversation of creating the first script, but it contains the iterative process of adding/changing features since then). I made little modifications but the general structure is the same.
+
+# Limitations
+
+The script is available as-is and is definitely not perfect. It started as a tool for myself where I needed to process some experimental videos of lightpainting and I wanted to grow it into something modular. Because of my limited time, little actual Python knowledge, and priorities, it has its limitations:
+
+ - The processing runs on the CPU, single threaded. It _is_ slow. Acceptable for most videos under 1 minutes, but definitely not fast. I'm not sure, because of nature of the script depending on previous frames' input, whether it can ever be made multithreaded or be moved to the GPU, nor I have any plans to do so. If you are a developer who wants to go that rabbit hole, feel free to do so :)
+
+ - ffmpeg and HDR supportis _very_ limited. I could only create a few ProRes HDR videos and that's it. I didn't have any luck with H.264 or H.265 regarding HDR. I'd love to find a solution but I'm not an ffmpeg guru, so if you have extensive knowledge of ffmpeg, codes, color spaces, gamma/log functions, bit depth, and any other video encoding parameters related to HDR especially in the context of ffmpeg, please reach out with a working example <3.
+
+ - Many combinations of blend modes and different parameters have not been tried and may produce inferiour results. Though with some experimentation, I believe there might be use cases for "non-brightening" (basically anything other than `lighten`, `screen`, and `add`) blend modes, especially with `cumulative` or `window` modes.
+
+ - `window` mode is slow. I repeat: `window` mode _is_ slow. Espcially with large window sizes.
+
+ - I tested this only on a MacBook Pro (M1 Max, 64GB RAM, macOS 14+15) and don't know how it would work with other systems.
