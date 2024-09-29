@@ -37,15 +37,23 @@ Controls the blend mode to apply to each frame over the previous frame. These ar
 
 Controls the dropoff power for the blending effect between each frames. Can be used with any other mode and is also used to modulate some of the blending modes. Used with `--power` (or `-pw` parameter). Default is `1`.
 
+## Output resolution
+
+Controls the output video resolution. Used with `--output_resolution` (or `-r`) parameter. Can be used like `-r 1920x1080` to specify width and height respectively.
+
+##
+
+Controls the output frame rate. Used with `--output_fps` (or `-fps`) parameter. It does _not_ smart-blend the images to keep the video time in sync with input, it just specifies the output frame rate. So, for example, if input video is 60FPS and you specify 30FPS, output will be slowed down 2x naturally.
+
 ## Bit depth
 
 _WARNING: This parameter is experimental and may not work in many scenarios!_
 
-Controls the bit depth of processing and output. Used with `--bit_depth` or `-bd` parameter. Default is `8` (SDR) and allowed values are `10`, `12`, `16`, and `32`, which they all act as HDR mode. In HDR mode, single frames are saved as output instead of a video file, _unless `--use_ffmpeg` flag is used_. Please note that ffmpeg HDR output works in very few scenarios and fails in most scenarios. 
+Controls the bit depth of processing and output. Used with `--bit_depth` or `-bd` parameter. Default is `8` (SDR) and allowed values are `16` and `32`, which they all act as HDR mode. In HDR mode, single frames are saved as output instead of a video file, _unless `--use_ffmpeg` flag is used_. Please note that ffmpeg HDR output works in very few scenarios and fails in most scenarios. 
 
 ## Use ffmpeg
 
-Controls whether or not to use ffmpeg with HDR bit depths (higher than `8`). Experimental and works with very specific scenarios only. Used with `--use-ffmpeg` (or `-ff`),
+Controls whether or not to use ffmpeg with 16-bit bit depths for HDR ProRes video output. Experimental and works with very specific scenarios only. Used with `--use-ffmpeg` (or `-ff`),
 
 # Getting started
 
