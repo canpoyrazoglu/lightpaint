@@ -7,18 +7,33 @@ from collections import deque
 import subprocess
 from tqdm import tqdm
 
-def process_video(input_path, output_folder, mode, decay_type, decay_param, blend_mode, bit_depth, window_size, use_ffmpeg, power):
+def process_video(input_path, output_folder, mode, decay_type, decay_param, blend_mode, bit_depth, window_size, use_ffmpeg, power, output_resolution, output_fps):
     # Open the input video file
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
         print("Error: Could not open video.")
         return
 
-    # Retrieve video properties
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30  # Default to 30 if FPS is not available
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  # Frame width
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))  # Frame height
+    # Retrieve input video properties
+    input_fps = cap.get(cv2.CAP_PROP_FPS) or 30  # Default to 30 if FPS is not available
+    input_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  # Frame width
+    input_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))  # Frame height
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # Total number of frames
+
+    # Set output frame rate
+    if output_fps is None:
+        output_fps = input_fps  # Use input video FPS if not specified
+
+    # Set output resolution
+    if output_resolution is not None:
+        # Parse the output resolution
+        try:
+            output_width, output_height = map(int, output_resolution.lower().split('x'))
+        except ValueError:
+            print("Error: Output resolution must be in the format WIDTHxHEIGHT, e.g., 1920x1080.")
+            return
+    else:
+        output_width, output_height = input_width, input_height  # Use input video resolution if not specified
 
     # Set max pixel value based on bit depth
     if bit_depth == 8:
@@ -49,13 +64,15 @@ def process_video(input_path, output_folder, mode, decay_type, decay_param, blen
     else:
         mode_str = "unknown_mode"
     
-    output_filename = f"{base_name}_{mode_str}_{blend_mode}_power_{power}_{bit_depth}bit.mp4"
+    output_filename = f"{base_name}_{mode_str}_{blend_mode}_power_{power}_{bit_depth}bit_{output_width}x{output_height}_{output_fps}fps.mp4"
     output_path = os.path.join(output_folder, output_filename)
 
     # If file already exists, append a counter (e.g., _2, _3)
     count = 2
+    original_output_filename = output_filename
     while os.path.exists(output_path):
-        output_path = os.path.join(output_folder, f"{os.path.splitext(output_filename)[0]}_{count}.mp4")
+        output_filename = f"{os.path.splitext(original_output_filename)[0]}_{count}.mp4"
+        output_path = os.path.join(output_folder, output_filename)
         count += 1
 
     print(f"Saving output to: {output_path}")
@@ -67,7 +84,7 @@ def process_video(input_path, output_folder, mode, decay_type, decay_param, blen
         print(f"Frames will be saved to directory '{frames_dir}'")
 
     # Print starting message with options
-    print(f"Starting processing '{os.path.basename(input_path)}' ({width}x{height}, {frame_count} frames, {bit_depth}-bit)")
+    print(f"Starting processing '{os.path.basename(input_path)}' ({input_width}x{input_height}, {frame_count} frames, {bit_depth}-bit)")
     if bit_depth == 8:
         print(f"Output will be saved to '{output_path}'")
     print("Processing options:")
@@ -79,6 +96,8 @@ def process_video(input_path, output_folder, mode, decay_type, decay_param, blen
         print(f"  Decay parameter: {decay_param}")
     print(f"  Blend mode: {blend_mode}")
     print(f"  Bit depth: {bit_depth}")
+    print(f"  Output resolution: {output_width}x{output_height}")
+    print(f"  Output frame rate: {output_fps} fps")
     if use_ffmpeg:
         print(f"  FFmpeg HDR ProRes export: Enabled")
     else:
@@ -88,10 +107,9 @@ def process_video(input_path, output_folder, mode, decay_type, decay_param, blen
     # Initialize video writer for 8-bit output
     if bit_depth == 8:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # MPEG-4 codec
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        out = cv2.VideoWriter(output_path, fourcc, output_fps, (output_width, output_height))
 
     # Initialize processing variables
-    frame_number = 0  # Current frame number
     cumulative_frame = None
     frame_buffer = deque(maxlen=window_size) if mode == 'window' else None
 
@@ -99,6 +117,10 @@ def process_video(input_path, output_folder, mode, decay_type, decay_param, blen
         ret, frame = cap.read()
         if not ret:
             break  # Exit loop if no frames are left to read
+
+        # Resize frame if output resolution is different
+        if (input_width, input_height) != (output_width, output_height):
+            frame = cv2.resize(frame, (output_width, output_height), interpolation=cv2.INTER_AREA)
 
         frame = frame.astype(dtype)
         if bit_depth == 32:
@@ -117,7 +139,7 @@ def process_video(input_path, output_folder, mode, decay_type, decay_param, blen
                 # Combine frames in the buffer
                 cumulative_frame = frame_buffer[0].copy()
                 for idx in range(1, window_size):
-                    cumulative_frame = blend_frames(cumulative_frame, frame_float, blend_mode, max_pixel_value, power)
+                    cumulative_frame = blend_frames(cumulative_frame, frame_buffer[idx], blend_mode, max_pixel_value, power)
         elif mode == 'decay':
             # Decay mode
             if cumulative_frame is None:
@@ -173,16 +195,14 @@ def process_video(input_path, output_folder, mode, decay_type, decay_param, blen
                 out.write(output_frame)
             else:
                 # Save frame as image in output directory
-                frame_filename = os.path.join(output_path, f"frame_{frame_number:06d}.png")
+                frame_filename = os.path.join(frames_dir, f"frame_{frame_number:06d}.png")
                 if bit_depth == 32:
                     # For float32, save as 32-bit TIFF
-                    frame_filename = os.path.join(output_path, f"frame_{frame_number:06d}.tiff")
+                    frame_filename = os.path.join(frames_dir, f"frame_{frame_number:06d}.tiff")
                     cv2.imwrite(frame_filename, output_frame, [cv2.IMWRITE_TIFF_COMPRESSION, 1])
                 else:
                     # For uint16, save as 16-bit PNG
                     cv2.imwrite(frame_filename, output_frame)
-
-        frame_number += 1
 
     # Release video resources
     cap.release()
@@ -192,9 +212,9 @@ def process_video(input_path, output_folder, mode, decay_type, decay_param, blen
     # Print completion message
     print(f"Processing completed.")
     if bit_depth == 8:
-        print(f"Wrote '{output_path}' ({width}x{height}, {frame_number} frames, {bit_depth}-bit) with options:")
+        print(f"Wrote '{output_path}' ({output_width}x{output_height}, {frame_number + 1} frames, {bit_depth}-bit) with options:")
     else:
-        print(f"Saved frames to '{output_path}' ({width}x{height}, {frame_number} frames, {bit_depth}-bit) with options:")
+        print(f"Saved frames to '{frames_dir}' ({output_width}x{output_height}, {frame_number + 1} frames, {bit_depth}-bit) with options:")
     print(f"  Mode: {mode}")
     if mode == 'window':
         print(f"  Window size: {window_size}")
@@ -207,7 +227,7 @@ def process_video(input_path, output_folder, mode, decay_type, decay_param, blen
     # Optional FFmpeg HDR ProRes export
     if use_ffmpeg and bit_depth >= 10:
         print("Starting FFmpeg HDR ProRes export...")
-        ffmpeg_export(output_path, fps)
+        ffmpeg_export(frames_dir, output_fps)
     elif use_ffmpeg:
         print("FFmpeg HDR ProRes export is only supported for bit depths >= 10.")
 
@@ -324,8 +344,6 @@ def blend_frames(cumulative_frame, frame_float, blend_mode, max_pixel_value, pow
     else:
         raise ValueError("Invalid blend mode")
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Video processing with blend modes, bit depth, decay, and more.")
     parser.add_argument("-i", "--input", required=True, help="Path to the input video file.")
@@ -340,6 +358,8 @@ if __name__ == "__main__":
     parser.add_argument("-bd", "--bit_depth", type=int, choices=[8, 10, 12, 16, 32], default=8, help="Bit depth (8, 10, 12, 16, or 32).")
     parser.add_argument("-ff", "--use_ffmpeg", action='store_true', help="Use FFmpeg to export HDR ProRes video (experimental, for bit depths >=10).")
     parser.add_argument("-pw", "--power", type=float, default=1.0, help="Power dropoff for blend effect. Controls how the blend diminishes as values move away from the maximum (default=1 for linear dropoff).")
+    parser.add_argument("-r", "--output_resolution", help="Output resolution in WIDTHxHEIGHT format, e.g., 1920x1080.")
+    parser.add_argument("-fps", "--output_fps", type=float, help="Output frame rate. If specified, output video will have this frame rate.")
 
     args = parser.parse_args()
 
@@ -375,4 +395,4 @@ if __name__ == "__main__":
         print("Error: Invalid mode selected.")
         sys.exit(1)
 
-    process_video(args.input, args.output_folder, args.mode, args.decay_type, args.decay_param, args.blend_mode, args.bit_depth, args.window_size, args.use_ffmpeg, args.power)
+    process_video(args.input, args.output_folder, args.mode, args.decay_type, args.decay_param, args.blend_mode, args.bit_depth, args.window_size, args.use_ffmpeg, args.power, args.output_resolution, args.output_fps)
