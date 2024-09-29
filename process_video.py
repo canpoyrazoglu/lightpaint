@@ -103,7 +103,8 @@ def process_video(input_path, output_folder, mode, decay_type, decay_param, blen
     print(f"  Blend mode: {blend_mode}")
     print(f"  Bit depth: {bit_depth}")
     print(f"  Output resolution: {output_width}x{output_height}")
-    print(f"  Output frame rate: {output_fps} fps")
+    if bit_depth == 8 or (bit_depth == 16 and use_ffmpeg):
+        print(f"  Output frame rate: {output_fps} fps")
     if use_ffmpeg:
         print(f"  FFmpeg ProRes export: Enabled")
     else:
@@ -278,7 +279,7 @@ def ffmpeg_export(frames_directory, fps, bit_depth):
 def blend_frames(cumulative_frame, frame_float, blend_mode, max_pixel_value, power=1):
     """
     Blend frames using the specified blend mode, with an optional power dropoff factor.
-    The power parameter controls how much the blend effect diminishes as values move away from the maximum possible value.
+    The power parameter controls how the blend effect diminishes as values move away from the maximum possible value.
     """
     # Normalize frame values to [0, 1] for easier calculations
     normalized_frame = frame_float / max_pixel_value
@@ -385,6 +386,18 @@ if __name__ == "__main__":
         print("Please use a bit depth of 8 or 16 for FFmpeg export.")
         sys.exit(1)
 
+    # Prevent frame rate parameter in 32-bit mode
+    if args.bit_depth == 32 and args.output_fps is not None:
+        print("Error: Frame rate parameter (-fps) cannot be used in 32-bit mode.")
+        print("Frame rate is only applicable when outputting video files.")
+        sys.exit(1)
+
+    # Prevent frame rate parameter in 16-bit mode when not using FFmpeg
+    if args.bit_depth == 16 and not args.use_ffmpeg and args.output_fps is not None:
+        print("Error: Frame rate parameter (-fps) cannot be used in 16-bit mode without FFmpeg.")
+        print("Frame rate is only applicable when outputting video files.")
+        sys.exit(1)
+
     # Initialize parameters
     decay_type = None
     decay_param = None
@@ -417,4 +430,17 @@ if __name__ == "__main__":
         print("Error: Invalid mode selected.")
         sys.exit(1)
 
-    process_video(args.input, args.output_folder, args.mode, decay_type, decay_param, args.blend_mode, args.bit_depth, args.window_size, args.use_ffmpeg, args.power, args.output_resolution, args.output_fps)
+    process_video(
+        args.input,
+        args.output_folder,
+        args.mode,
+        decay_type,
+        decay_param,
+        args.blend_mode,
+        args.bit_depth,
+        args.window_size,
+        args.use_ffmpeg,
+        args.power,
+        args.output_resolution,
+        args.output_fps
+    )
